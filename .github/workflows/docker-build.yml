@@ -1,9 +1,17 @@
-name: Build and Push Frontend (Tag)
+name: Build and Push Frontend
 
 on:
   push:
     tags:
-      - 'v*' # 只监听 tag 推送
+      - 'v*'  # 保持原样：监听正式发布
+  
+  # --- 新增：手动触发器 ---
+  workflow_dispatch:  # 允许你在 GitHub Actions 页面手动点击运行
+    inputs:
+      test_tag:
+        description: 'Test Tag Name (e.g. beta, test)'
+        required: true
+        default: 'beta'
 
 jobs:
   build:
@@ -13,39 +21,41 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 1. 提取 Tag 名字 (例如 v2.1)
-      - name: Extract Tag Name
+      # --- 关键修改：动态判断是 Tag 触发还是手动触发 ---
+      - name: Determine Docker Tags
         id: meta
         run: |
-          echo "TAG_NAME=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
-          echo "Detected Release Tag: ${GITHUB_REF_NAME}"
+          if [ "${{ github.event_name }}" == "push" ]; then
+            # 如果是打标签触发的 (正式版)
+            echo "TAGS=${{ secrets.DOCKER_USERNAME }}/bili-download-frontend:latest,${{ secrets.DOCKER_USERNAME }}/bili-download-frontend:${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+            echo "Running Mode: RELEASE (${GITHUB_REF_NAME})"
+          else
+            # 如果是手动触发的 (测试版)
+            TEST_TAG=${{ inputs.test_tag }}
+            echo "TAGS=${{ secrets.DOCKER_USERNAME }}/bili-download-frontend:${TEST_TAG}" >> $GITHUB_OUTPUT
+            echo "Running Mode: MANUAL TEST (${TEST_TAG})"
+          fi
 
-      # 2. 准备 Node 环境
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      # 3. 编译打包 (生成 dist)
       - name: Install and Build
         run: |
           npm install
           npm run build
 
-      # 4. 登录 Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # 5. 构建并推送镜像
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          # 自动打两个标签: latest 和 当前版本号
-          tags: |
-            ${{ secrets.DOCKER_USERNAME }}/bili-download-frontend:latest
-            ${{ secrets.DOCKER_USERNAME }}/bili-download-frontend:${{ steps.meta.outputs.TAG_NAME }}
+          # 使用上面动态生成的 tags
+          tags: ${{ steps.meta.outputs.TAGS }}
