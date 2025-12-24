@@ -13,7 +13,7 @@ COPY dist .
 
 # 3. 复制自定义 Nginx 配置
 # 假设你的根目录下有一个 nginx.conf
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/nginx.conf
 
 # 4. 【权限保险】
 # 虽然在 Linux Action 上构建通常没问题，但为了防止 Nginx 报 403 Forbidden，
